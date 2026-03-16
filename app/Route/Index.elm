@@ -4,14 +4,20 @@ import BackendTask exposing (BackendTask)
 import FatalError exposing (FatalError)
 import Head
 import Head.Seo as Seo
-import Html
+import Html exposing (Html)
+import Json.Decode as JD
 import Pages.Url
 import PagesMsg exposing (PagesMsg)
-import UrlPath
-import Route
+import Pog
 import RouteBuilder exposing (App, StatelessRoute)
 import Shared
+import UrlPath
 import View exposing (View)
+
+
+type alias Milkshake =
+    { name : String
+    }
 
 
 type alias Model =
@@ -27,7 +33,7 @@ type alias RouteParams =
 
 
 type alias Data =
-    { message : String
+    { shakes : List Milkshake
     }
 
 
@@ -46,9 +52,24 @@ route =
 
 data : BackendTask FatalError Data
 data =
-    BackendTask.succeed Data
-        |> BackendTask.andMap
-            (BackendTask.succeed "Hello!")
+    BackendTask.map Data
+        (Pog.query
+            "SELECT * FROM milkshakes WHERE id=$1"
+            |> Pog.withParams [ Pog.int 1 ]
+            |> Pog.decodeInto milkshakesDecoder
+            |> Pog.execute
+        )
+        |> BackendTask.allowFatal
+
+
+milkshakesDecoder : JD.Decoder (List Milkshake)
+milkshakesDecoder =
+    JD.field "rows" (JD.list milkshakeDecoder)
+
+
+milkshakeDecoder : JD.Decoder Milkshake
+milkshakeDecoder =
+    JD.map Milkshake (JD.field "name" JD.string)
 
 
 head :
@@ -78,11 +99,16 @@ view :
 view app shared =
     { title = "elm-pages is running"
     , body =
-        [ Html.h1 [] [ Html.text "elm-pages is up and running!" ]
-        , Html.p []
-            [ Html.text <| "The message is: " ++ app.data.message
-            ]
-        , Route.Blog__Slug_ { slug = "hello" }
-            |> Route.link [] [ Html.text "My blog post" ]
+        [ Html.h1 [] [ Html.text "ElmPog demo" ]
+        , Html.div [] [ Html.text "Have a look on our milkshakes:", milkshakeOfTheDayView app.data.shakes ]
         ]
     }
+
+
+milkshakeOfTheDayView : List Milkshake -> Html msg
+milkshakeOfTheDayView shakes =
+    Html.ul []
+        (List.map
+            (\shake -> Html.li [] [ Html.text shake.name ])
+            shakes
+        )

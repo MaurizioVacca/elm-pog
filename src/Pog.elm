@@ -1,113 +1,114 @@
-module Pog exposing
-    ( connect
-    , defaultConfig
-    , withDatabaseName
-    , withDatabasePort
-    , withHost
-    , withPassword
-    , withPoolSize
-    , withSSL
-    , withUsername
-    )
+module Pog exposing (bool, decodeInto, execute, float, int, query, string, withParams)
 
+{-| Allow to perform safely statically typed query.
 
-type alias Config =
-    { poolName : String
-    , host : String
-    , databaseName : String
-    , databasePort : Int
-    , username : String
-    , password : Maybe String
-    , ssl : Bool
-    , poolSize : Int
-    }
+    import Pog
 
+    type alias Milkshake =
+        { name : String
+        }
 
-type Connection
-    = Connection
+    rows : List Milkshake
+    rows =
+        Pog.query "SELECT * FROM milkshakes WHERE name = $1"
+            |> Pog.withParams (Pog.string "strawberrysome")
+            |> Pog.decodeInto milkshakeDecoder
+            |> Pog.execute
 
-
-defaultPort : Int
-defaultPort =
-    5432
-
-
-{-| Creates a new default PostgreSQL configuration for a given pool name.
 -}
-defaultConfig : String -> Config
-defaultConfig poolName =
-    Config
-        -- pool name
-        poolName
-        -- host
-        "127.0.0.1"
-        -- name
-        "postgres"
-        -- port
-        defaultPort
-        -- username
-        "postgres"
-        -- password
-        Nothing
-        -- ssl
-        False
-        -- pool size
-        10
+
+import BackendTask exposing (BackendTask)
+import BackendTask.Custom
+import FatalError exposing (FatalError)
+import Json.Decode exposing (Decoder, fail)
+import Json.Encode as Encode
 
 
-{-| Updates host.
--}
-withHost : Config -> String -> Config
-withHost config host =
-    { config | host = host }
+type Value
+    = IntVal Int
+    | StringVal String
+    | BoolVal Bool
+    | FloatVal Float
+    | NullVal
 
 
-{-| Updates configured database name.
--}
-withDatabaseName : Config -> String -> Config
-withDatabaseName config name =
-    { config | databaseName = name }
+type Query a
+    = Query
+        { sql : String
+        , params : List Value
+        , rowDecoder : Decoder a
+        , timeout : Int
+        }
 
 
-{-| Updates configured database port.
--}
-withDatabasePort : Config -> Int -> Config
-withDatabasePort config databasePort =
-    { config
-        | databasePort = databasePort
-    }
+query : String -> Query a
+query sql =
+    Query
+        { sql = sql
+        , params = []
+        , rowDecoder = fail "No decoder attached yet — pipe through Db.run"
+        , timeout = 5000
+        }
 
 
-{-| Updates configured database username.
--}
-withUsername : Config -> String -> Config
-withUsername config username =
-    { config | username = username }
+string : String -> Value
+string val =
+    StringVal val
 
 
-{-| Updates configured database password.
--}
-withPassword : Config -> String -> Config
-withPassword config password =
-    { config | password = Just password }
+int : Int -> Value
+int val =
+    IntVal val
 
 
-{-| Updates configured SSL preferences.
--}
-withSSL : Config -> Bool -> Config
-withSSL config ssl =
-    { config | ssl = ssl }
+float : Float -> Value
+float val =
+    FloatVal val
 
 
-{-| Updates configured pool side.
--}
-withPoolSize : Config -> Int -> Config
-withPoolSize config poolSize =
-    { config | poolSize = poolSize }
+bool : Bool -> Value
+bool val =
+    BoolVal val
 
 
-{-| Connects to configured database.
--}
-connect : Config -> Connection
-connect config =
-    Connection
+null : Value
+null =
+    NullVal
+
+
+withParams : List Value -> Query a -> Query a
+withParams params (Query q) =
+    Query { q | params = params }
+
+
+decodeInto : Decoder a -> Query a -> Query a
+decodeInto decoder (Query q) =
+    Query { q | rowDecoder = decoder }
+
+
+encodeValue : Value -> Encode.Value
+encodeValue val =
+    case val of
+        IntVal anInt ->
+            Encode.int anInt
+
+        StringVal aString ->
+            Encode.string aString
+
+        BoolVal aBool ->
+            Encode.bool aBool
+
+        FloatVal aFloat ->
+            Encode.float aFloat
+
+        NullVal ->
+            Encode.null
+
+
+execute : Query a -> BackendTask { fatal : FatalError, recoverable : BackendTask.Custom.Error } a
+execute (Query q) =
+    let
+        preparedStatement =
+            Encode.object [ ( "sql", Encode.string q.sql ), ( "params", Encode.list encodeValue q.params ) ]
+    in
+    BackendTask.Custom.run "executeQuery" preparedStatement q.rowDecoder

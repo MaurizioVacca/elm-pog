@@ -7,9 +7,9 @@ import Html exposing (Html)
 import Html.Events
 import Pages.Flags
 import Pages.PageUrl exposing (PageUrl)
-import UrlPath exposing (UrlPath)
 import Route exposing (Route)
 import SharedTemplate exposing (SharedTemplate)
+import UrlPath exposing (UrlPath)
 import View exposing (View)
 
 
