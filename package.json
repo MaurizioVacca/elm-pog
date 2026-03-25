@@ -2,16 +2,16 @@
   "name": "elm-pages-app",
   "type": "module",
   "scripts": {
-    "dev": "cd cli && elm-pages run src/Main.elm",
+    "dev": "elm-pages run cli/src/Main.elm",
     "build": "elm-pages build"
   },
   "devDependencies": {
     "@types/pg": "^8.16.0",
     "elm-codegen": "^0.6.3",
     "elm-optimize-level-2": "^0.3.5",
+    "elm-pages": "^3.3.0",
     "elm-review": "^2.13.5",
     "elm-tooling": "^1.17.0",
-    "elm-pages": "^3.3.0",
     "lamdera": "^0.19.1-1.4.0"
   },
   "dependencies": {
