@@ -1,4 +1,26 @@
-module Pog exposing (bool, decodeInto, execute, float, int, query, string, withParams)
+module Pog exposing
+    ( Config
+    , bool
+    , config
+    , decodeInto
+    , defaultPort
+    , execute
+    , float
+    , int
+    , query
+    , string
+    , viewDatabase
+    , viewHost
+    , viewPassword
+    , viewPort
+    , viewUser
+    , withDatabase
+    , withHost
+    , withParams
+    , withPassword
+    , withPort
+    , withUser
+    )
 
 {-| Allow to perform safely statically typed query.
 
@@ -39,6 +61,92 @@ type Query a
         , rowDecoder : Decoder a
         , timeout : Int
         }
+
+
+type Config
+    = Config
+        { user : String
+        , password : Maybe String
+        , host : String
+        , port_ : Int
+        , database : String
+        }
+
+
+defaultPort : Int
+defaultPort =
+    5000
+
+
+defaultConfig : Config
+defaultConfig =
+    Config
+        { user = "postgres"
+        , password = Nothing
+        , host = "localhost"
+        , port_ = defaultPort
+        , database = "postgres"
+        }
+
+
+config : Config
+config =
+    defaultConfig
+
+
+viewUser : Config -> String
+viewUser (Config c) =
+    c.user
+
+
+viewPassword : Config -> String
+viewPassword (Config c) =
+    case c.password of
+        Just pwd ->
+            pwd
+
+        Nothing ->
+            ""
+
+
+viewHost : Config -> String
+viewHost (Config c) =
+    c.host
+
+
+viewPort : Config -> String
+viewPort (Config c) =
+    String.fromInt c.port_
+
+
+viewDatabase : Config -> String
+viewDatabase (Config c) =
+    c.database
+
+
+withUser : String -> Config -> Config
+withUser user (Config c) =
+    Config { c | user = user }
+
+
+withPassword : String -> Config -> Config
+withPassword pwd (Config c) =
+    Config { c | password = Just pwd }
+
+
+withHost : String -> Config -> Config
+withHost host (Config c) =
+    Config { c | host = host }
+
+
+withPort : Int -> Config -> Config
+withPort port_ (Config c) =
+    Config { c | port_ = port_ }
+
+
+withDatabase : String -> Config -> Config
+withDatabase database (Config c) =
+    Config { c | database = database }
 
 
 query : String -> Query a
