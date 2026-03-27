@@ -9,23 +9,39 @@ I will most likely start from the second option and eventually work my way towar
 
 ## Inspirations
 
-The main inspiration comes from libraries such https://github.com/lpil/pog and https://github.com/dillonkearns/elm-graphql.
+The main inspiration comes from libraries such as https://github.com/lpil/pog and https://github.com/dillonkearns/elm-graphql.
 
 ## What to expect from this module
 
-A small,  curated,  PostgreSQL client for Elm with:
+A small, curated, PostgreSQL client for Elm with:
 
-- a way to handle DB connection
+- a (hopefully) hassle-free way to handle DB connection;
 - a way to decode returned values;
-- a way to perform “query as text”, with the possibility to pass down dynamic parameters.
+- a way to perform “query as text” with the possibility to pass down dynamic parameters;
+- a CLI to configure and scaffold `elm-pog` in existing `elm-pages` projects.
 
-## What this module will not include
+## Future plans
 
-- automatically generated code (not here, not now);
-- run migrations.
+Since the project works on `elm-pages script`, a new set of opportunities will open up:
 
-## Actions
+- run migrations through `squalo`;
+- generate Elm code from `sql` files.
+- ensure test coverage.
 
-- [x]  Set up a fresh project with `elm-pages`
-- [x]  Create a repository
-- [ ]  Create a PoC with a working DB connection.
+
+## Milestones and goals
+
+### Done
+
+- [x] Set up a fresh project with `elm-pages`
+- [x] Create a repository
+- [x] Create a PoC with a working DB connection
+- [x] Create `elm-pog` client
+- [x] Allow parametric queries
+
+### In Progress
+
+- [ ] Ensure .env file exists
+- [ ] Add `update config` command
+- [ ] Start working towards scaffolding
+- [ ] Publish to NPM
