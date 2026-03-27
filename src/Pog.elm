@@ -75,7 +75,7 @@ type Config
 
 defaultPort : Int
 defaultPort =
-    5000
+    5432
 
 
 defaultConfig : Config

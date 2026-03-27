@@ -1,10 +1,13 @@
 module Main exposing (run)
 
+import Ansi.Color
+import Ansi.Font
 import BackendTask exposing (BackendTask)
+import BackendTask.File as File
 import Cli.OptionsParser as OptionsParser
 import Cli.Program as Program
 import FatalError
-import Json.Encode as Encode
+import Json.Decode as JD
 import Pages.Script as Script exposing (Script)
 import Pog
 
@@ -59,10 +62,19 @@ questions =
 -}
 init : BackendTask FatalError.FatalError ()
 init =
-    Script.log """
-    Creating a new Squalo configuration.
-    Enter the new value, or press ENTER for using the default
-    """
+    Script.log
+        (logo
+            ++ "\n🦈 Welcome to Squalo, the command line interface for configuring elm-pog in your project."
+            ++ "\nYou're about to initialize a new elm-pog client.\nThe created configuration can be changed at any time running "
+            ++ Ansi.Font.bold "squalo update config, "
+            ++ "or by manually editing the "
+            ++ Ansi.Font.bold "squalo.json "
+            ++ "file."
+            ++ "\nInsert your values of choice, or just press "
+            ++ Ansi.Font.bold "ENTER"
+            ++ " for using the "
+            ++ Ansi.Color.fontColor (Ansi.Color.rgb { red = 128, green = 128, blue = 128 }) "[default]"
+        )
         |> Script.doThen (askInteractive questions newConfig)
         |> BackendTask.andThen
             (\config ->
@@ -88,14 +100,61 @@ init =
                     |> BackendTask.andThen
                         (\confirm ->
                             if String.toLower confirm == "y" then
-                                Script.writeFile { path = "squalo.json", body = Encode.encode 4 (encodeConfig config) }
+                                File.rawFile ".env"
                                     |> BackendTask.allowFatal
-                                    |> BackendTask.andThen (\_ -> Script.log "Configuration completed.")
+                                    |> BackendTask.andThen
+                                        (\rawFile ->
+                                            Script.writeFile { path = ".env", body = rawFile ++ toEnvVariables config }
+                                                |> BackendTask.allowFatal
+                                        )
+                                    |> BackendTask.andThen (\_ -> Script.log "✨ Done.")
 
                             else
-                                Script.log "Configuration canceled."
+                                Script.log "🦈 No changes applied."
                         )
             )
+
+
+logo : String
+logo =
+    Ansi.Color.fontColor Ansi.Color.cyan
+        """
+                                                  ·●●·.●.
+           ···                                  ·●.   .●█
+          ··..●                               ·█.   ...·█
+           .·. ●.●                           ●● .......·█.
+           .● ●          ····●███████●····. ●●·........·█.
+            ··.   .·●█●·.                 .··●█●●●···...█·
+               ·█●.       .......................··█●●···●
+            .██.......................................●█●█
+     ..██●●·.         ...................................·█·
+   .█·................................···...................●●.
+   █..  ............................●█  ·█....................●█.
+   █             ...................████·●·........●...·........●█.                    ..
+   █                       ...       ●●●●.       ..●...·..█.......●●               .███●█.
+   ·●               .●●●                           ·   ·..█........·█           ·█●.●●●█·
+   .█.               ·●              .●●           ●  ·. .●  ........█.       ●█..●·●●█.
+    ·●                                 ●█·●.       .  ●  ·      ......●●    ·█.......█.
+     ·███·....                   .●█●█●●·         ●  ·.  ·         ....·█. █·.....  █
+       ·█·█..●█●████████████●...·●●█●●█.         ●   ·   ·           ....██......  ●·
+        ●████●●●█·█●●●█.·█●●●●██●●█●●█          ●   ●   █              ...●█·..   ·█
+        ●█.·●●●●●●●●●●●●●●█████●●●·●.         .·   ·   ●                 ..·●●.   ●.
+         ●·●·.·█●●█·····●█····· .█.              ●.  ·●                    ..·●..·●
+          ●● .●●█●   ●·●.  .·█●.                   ·●                       ..·█●█·
+           ·█·    .........                                                    ●·█·
+             ·●.                                 ..                           ●..●·
+              ●██·                              .....·●●                    ●█....●●
+            ·█.  .●█●                     .·     ......·●·               .●█●....  ●●
+           ●●    ....·█●·..               .●·    .......●█.          ..●●●  .█●..   ·●
+          ●●     ........·●█●·.......     ..●·     ....·●██........·●█·..●●   .·█●·..█·
+         ··      ......·●█.  .··██●··........·●.    ...·●●●●.··●█●·█·.....·█.      .··
+        .●      ...·●●·              ····●██●███·     ..·●·●●        ··██●··█
+        ●·..···●█··                             .█·     .·●●█·
+         ··.                                      .●●.    .●·█.
+                                                     ·█·    .██.
+                                                        ●●█·..·█.
+                                                             .·.
+"""
 
 
 askInteractive : List ( String, String ) -> Pog.Config -> BackendTask e Pog.Config
@@ -105,7 +164,15 @@ askInteractive qs config =
             BackendTask.succeed config
 
         ( question, default ) :: rest ->
-            Script.question ("? " ++ question ++ " [" ++ default ++ "]: ")
+            Script.question
+                (Ansi.Color.fontColor Ansi.Color.green "? "
+                    ++ Ansi.Font.bold question
+                    ++ Ansi.Color.fontColor (Ansi.Color.rgb { red = 128, green = 128, blue = 128 })
+                        (" ["
+                            ++ default
+                            ++ "]: "
+                        )
+                )
                 |> BackendTask.andThen
                     (\answer ->
                         let
@@ -140,19 +207,44 @@ askInteractive qs config =
                     )
 
 
-encodeConfig : Pog.Config -> Encode.Value
-encodeConfig config =
-    Encode.object
-        [ ( "user", Encode.string <| Pog.viewUser config )
-        , ( "password", Encode.string <| Pog.viewPassword config )
-        , ( "host", Encode.string <| Pog.viewHost config )
-        , ( "port", Encode.string <| Pog.viewPort config )
-        , ( "database", Encode.string <| Pog.viewDatabase config )
-        ]
+toEnvVariables : Pog.Config -> String
+toEnvVariables config =
+    """
+
+# ==========================================
+# Postgres
+# ==========================================
+"""
+        ++ (Pog.viewHost config |> (++) "\nPGHOST=")
+        ++ (Pog.viewDatabase config |> (++) "\nPGDATABASE=")
+        ++ (Pog.viewUser config |> (++) "\nPGUSER=")
+        ++ (Pog.viewPassword config |> (++) "\nPGPASSWORD=")
+        ++ (Pog.viewPort config |> (++) "\nPGPORT=")
 
 
 {-| Runs small diagnostic on configured database.
 -}
 heartbeat : BackendTask FatalError.FatalError ()
 heartbeat =
-    Script.log "Heartbeat"
+    Script.log "🦈 Checking database connectivity..."
+        |> BackendTask.andThen
+            (\_ ->
+                Pog.query "SELECT NOW()::text"
+                    |> Pog.decodeInto heartbeatDecoder
+                    |> Pog.execute
+                    |> BackendTask.allowFatal
+            )
+        |> BackendTask.andThen
+            (\list ->
+                Script.log (List.head list |> Maybe.withDefault "" |> (++) "❤️ Last beat: ")
+            )
+
+
+heartbeatDecoder : JD.Decoder (List String)
+heartbeatDecoder =
+    JD.field "rows" (JD.list nowDecoder)
+
+
+nowDecoder : JD.Decoder String
+nowDecoder =
+    JD.field "now" JD.string
