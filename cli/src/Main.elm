@@ -4,6 +4,7 @@ import Ansi.Color
 import Ansi.Font
 import BackendTask exposing (BackendTask)
 import BackendTask.File as File
+import Cli.Extra
 import Cli.OptionsParser as OptionsParser
 import Cli.Program as Program
 import FatalError
@@ -58,103 +59,80 @@ questions =
     ]
 
 
-{-| Creates a new squalo.json configuration.
+{-| Creates a new configuration.
 -}
 init : BackendTask FatalError.FatalError ()
 init =
     Script.log
-        (logo
-            ++ "\n🦈 Welcome to Squalo, the command line interface for configuring elm-pog in your project."
-            ++ "\nYou're about to initialize a new elm-pog client.\nThe created configuration can be changed at any time running "
-            ++ Ansi.Font.bold "squalo update config, "
-            ++ "or by manually editing the "
-            ++ Ansi.Font.bold "squalo.json "
-            ++ "file."
-            ++ "\nInsert your values of choice, or just press "
-            ++ Ansi.Font.bold "ENTER"
-            ++ " for using the "
-            ++ Ansi.Color.fontColor (Ansi.Color.rgb { red = 128, green = 128, blue = 128 }) "[default]"
+        (Cli.Extra.logo
+            ++ (Cli.Extra.prependNewLine <| Cli.Extra.info "Welcome to Squalo, the command line interface for configuring elm-pog in your project.")
+            ++ (Cli.Extra.prependNewLine <| "You're about to initialize a new elm-pog client.")
+            ++ (Cli.Extra.prependNewLine <|
+                    ("The created configuration can be changed at any time running " ++ Ansi.Font.bold "squalo update config, " ++ "or by manually editing the ")
+                        ++ Ansi.Font.bold ".env "
+                        ++ "file."
+               )
+            ++ (Cli.Extra.prependNewLine <|
+                    "Insert your values of choice, or just press "
+                        ++ Ansi.Font.bold "ENTER"
+                        ++ " for using the "
+                        ++ Ansi.Color.fontColor (Ansi.Color.rgb { red = 128, green = 128, blue = 128 }) "[default]"
+               )
         )
         |> Script.doThen (askInteractive questions newConfig)
         |> BackendTask.andThen
             (\config ->
                 Script.log
-                    ("\nProposed configuration:\n"
-                        ++ "  - Database name: "
-                        ++ Pog.viewDatabase config
-                        ++ "\n"
-                        ++ "  - Database host: "
-                        ++ Pog.viewHost config
-                        ++ "\n"
-                        ++ "  - Database port: "
-                        ++ Pog.viewPort config
-                        ++ "\n"
-                        ++ "  - Database user: "
-                        ++ Pog.viewUser config
-                        ++ "\n"
-                        ++ "  - Database password: "
-                        ++ Pog.viewPassword config
+                    (("Proposed configuration:" |> Cli.Extra.prependNewLine |> Cli.Extra.appendNewLine)
+                        ++ ("Database name: " ++ Pog.viewDatabase config |> Cli.Extra.succeed |> Cli.Extra.appendNewLine)
+                        ++ ("Database host: " ++ Pog.viewHost config |> Cli.Extra.succeed |> Cli.Extra.appendNewLine)
+                        ++ ("Database port: " ++ Pog.viewPort config |> Cli.Extra.succeed |> Cli.Extra.appendNewLine)
+                        ++ ("Database user: " ++ Pog.viewUser config |> Cli.Extra.succeed |> Cli.Extra.appendNewLine)
+                        ++ ("Database password: " ++ Pog.viewPassword config |> Cli.Extra.succeed)
                     )
-                    |> Script.doThen (Script.log "\nDoes it look ok? [Y/n]: ")
-                    |> BackendTask.andThen (\_ -> Script.readKeyWithDefault "y")
+                    |> Script.doThen (Script.log "Does it look ok? [Y/n]: ")
+                    |> Script.doThen (Script.readKeyWithDefault "y")
                     |> BackendTask.andThen
                         (\confirm ->
                             if String.toLower confirm == "y" then
-                                File.rawFile ".env"
-                                    |> BackendTask.allowFatal
+                                checkEnvFile
                                     |> BackendTask.andThen
-                                        (\rawFile ->
-                                            Script.writeFile { path = ".env", body = rawFile ++ toEnvVariables config }
-                                                |> BackendTask.allowFatal
+                                        (\envFileExists ->
+                                            let
+                                                elmPogEnvVariables =
+                                                    toEnvVariables config
+                                            in
+                                            if envFileExists then
+                                                Script.log ("found existing .env file. Appending new content..." |> Cli.Extra.succeed |> Cli.Extra.appendNewLine)
+                                                    |> BackendTask.andThen (\_ -> File.rawFile ".env")
+                                                    |> BackendTask.allowFatal
+                                                    |> BackendTask.andThen
+                                                        (\rawFile ->
+                                                            writeToEnvFile (Just rawFile) elmPogEnvVariables
+                                                        )
+
+                                            else
+                                                Script.log ("missing .env file. Creating new one..." |> Cli.Extra.failed |> Cli.Extra.appendNewLine)
+                                                    |> Script.doThen (writeToEnvFile Nothing elmPogEnvVariables)
                                         )
-                                    |> BackendTask.andThen (\_ -> Script.log "✨ Done.")
+                                    |> Script.doThen (Script.log "✨ Done.")
 
                             else
-                                Script.log "🦈 No changes applied."
+                                Script.log ("No changes applied." |> Cli.Extra.info)
                         )
             )
 
 
-logo : String
-logo =
-    Ansi.Color.fontColor Ansi.Color.cyan
-        """
-                                                  ·●●·.●.
-           ···                                  ·●.   .●█
-          ··..●                               ·█.   ...·█
-           .·. ●.●                           ●● .......·█.
-           .● ●          ····●███████●····. ●●·........·█.
-            ··.   .·●█●·.                 .··●█●●●···...█·
-               ·█●.       .......................··█●●···●
-            .██.......................................●█●█
-     ..██●●·.         ...................................·█·
-   .█·................................···...................●●.
-   █..  ............................●█  ·█....................●█.
-   █             ...................████·●·........●...·........●█.                    ..
-   █                       ...       ●●●●.       ..●...·..█.......●●               .███●█.
-   ·●               .●●●                           ·   ·..█........·█           ·█●.●●●█·
-   .█.               ·●              .●●           ●  ·. .●  ........█.       ●█..●·●●█.
-    ·●                                 ●█·●.       .  ●  ·      ......●●    ·█.......█.
-     ·███·....                   .●█●█●●·         ●  ·.  ·         ....·█. █·.....  █
-       ·█·█..●█●████████████●...·●●█●●█.         ●   ·   ·           ....██......  ●·
-        ●████●●●█·█●●●█.·█●●●●██●●█●●█          ●   ●   █              ...●█·..   ·█
-        ●█.·●●●●●●●●●●●●●●█████●●●·●.         .·   ·   ●                 ..·●●.   ●.
-         ●·●·.·█●●█·····●█····· .█.              ●.  ·●                    ..·●..·●
-          ●● .●●█●   ●·●.  .·█●.                   ·●                       ..·█●█·
-           ·█·    .........                                                    ●·█·
-             ·●.                                 ..                           ●..●·
-              ●██·                              .....·●●                    ●█....●●
-            ·█.  .●█●                     .·     ......·●·               .●█●....  ●●
-           ●●    ....·█●·..               .●·    .......●█.          ..●●●  .█●..   ·●
-          ●●     ........·●█●·.......     ..●·     ....·●██........·●█·..●●   .·█●·..█·
-         ··      ......·●█.  .··██●··........·●.    ...·●●●●.··●█●·█·.....·█.      .··
-        .●      ...·●●·              ····●██●███·     ..·●·●●        ··██●··█
-        ●·..···●█··                             .█·     .·●●█·
-         ··.                                      .●●.    .●·█.
-                                                     ·█·    .██.
-                                                        ●●█·..·█.
-                                                             .·.
-"""
+checkEnvFile : BackendTask error Bool
+checkEnvFile =
+    Script.log ("Looking for " ++ Ansi.Font.bold ".env" |> Cli.Extra.info)
+        |> BackendTask.andThen (\_ -> File.exists ".env")
+
+
+writeToEnvFile : Maybe String -> String -> BackendTask FatalError.FatalError ()
+writeToEnvFile exisingEnv pogEnv =
+    Script.writeFile { path = ".env", body = pogEnv |> (++) (Maybe.withDefault "" exisingEnv) }
+        |> BackendTask.allowFatal
 
 
 askInteractive : List ( String, String ) -> Pog.Config -> BackendTask e Pog.Config
@@ -165,7 +143,7 @@ askInteractive qs config =
 
         ( question, default ) :: rest ->
             Script.question
-                (Ansi.Color.fontColor Ansi.Color.green "? "
+                (Ansi.Color.fontColor Ansi.Color.yellow "? "
                     ++ Ansi.Font.bold question
                     ++ Ansi.Color.fontColor (Ansi.Color.rgb { red = 128, green = 128, blue = 128 })
                         (" ["
@@ -207,26 +185,26 @@ askInteractive qs config =
                     )
 
 
+{-| Converts `Pog.Config` to a string that
+can be written on `.env` file
+-}
 toEnvVariables : Pog.Config -> String
 toEnvVariables config =
-    """
-
-# ==========================================
-# Postgres
-# ==========================================
-"""
-        ++ (Pog.viewHost config |> (++) "\nPGHOST=")
-        ++ (Pog.viewDatabase config |> (++) "\nPGDATABASE=")
-        ++ (Pog.viewUser config |> (++) "\nPGUSER=")
-        ++ (Pog.viewPassword config |> (++) "\nPGPASSWORD=")
-        ++ (Pog.viewPort config |> (++) "\nPGPORT=")
+    (Cli.Extra.divider |> Cli.Extra.appendNewLine)
+        ++ ("# Postgres" |> Cli.Extra.appendNewLine)
+        ++ (Cli.Extra.divider |> Cli.Extra.appendNewLine)
+        ++ (Pog.viewHost config |> (++) "PGHOST=" |> Cli.Extra.appendNewLine)
+        ++ (Pog.viewDatabase config |> (++) "PGDATABASE=" |> Cli.Extra.appendNewLine)
+        ++ (Pog.viewUser config |> (++) "PGUSER=" |> Cli.Extra.appendNewLine)
+        ++ (Pog.viewPassword config |> (++) "PGPASSWORD=" |> Cli.Extra.appendNewLine)
+        ++ (Pog.viewPort config |> (++) "PGPORT=" |> Cli.Extra.appendNewLine)
 
 
 {-| Runs small diagnostic on configured database.
 -}
 heartbeat : BackendTask FatalError.FatalError ()
 heartbeat =
-    Script.log "🦈 Checking database connectivity..."
+    Script.log "🦈  Checking database connectivity..."
         |> BackendTask.andThen
             (\_ ->
                 Pog.query "SELECT NOW()::text"
@@ -236,7 +214,7 @@ heartbeat =
             )
         |> BackendTask.andThen
             (\list ->
-                Script.log (List.head list |> Maybe.withDefault "" |> (++) "❤️ Last beat: ")
+                Script.log (List.head list |> Maybe.withDefault "" |> (++) "❤️  Last beat: ")
             )
 
 
